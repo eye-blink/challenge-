@@ -557,6 +557,7 @@
     flex-direction: column;
     gap: 0;
     padding: 0;
+    padding-bottom: 90px; /* space for fixed start button */
     overflow-y: scroll;
     background: linear-gradient(180deg, #07000e 0%, #0a0012 60%, #07000e 100%);
     cursor: pointer;
@@ -821,10 +822,40 @@
     animation: camPulse 2.2s infinite;
   }
 
+  /* Start button — fixed at bottom so always visible & tappable */
+  #startBtn {
+    position: fixed;
+    bottom: 18px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: calc(100% - 32px);
+    max-width: 448px;
+    z-index: 100;
+    border-radius: 20px;
+    font-size: 1.08rem;
+    box-shadow:
+      0 8px 36px rgba(255,20,147,0.7),
+      0 0 0 1px rgba(255,150,200,0.2) inset;
+  }
+
   .btn-stop {
     background: linear-gradient(135deg, #ff4757 0%, #c0003a 100%);
     color: #fff;
     box-shadow: 0 4px 22px rgba(255,71,87,0.5);
+  }
+
+  /* Stop button — same fixed position as start button */
+  #stopBtn {
+    position: fixed;
+    bottom: 18px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: calc(100% - 32px);
+    max-width: 448px;
+    z-index: 100;
+    border-radius: 20px;
+    font-size: 1.08rem;
+    box-shadow: 0 8px 36px rgba(255,71,87,0.6);
   }
 
   .upload-status {
@@ -2468,36 +2499,23 @@ function getShareText(withScore = true) {
 }
 
 function shareToWhatsApp() {
-  const text       = encodeURIComponent(getShareText(true));
-  const isMobile   = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
-  const isIOS      = /iPhone|iPad|iPod/i.test(navigator.userAgent);
+  const text    = encodeURIComponent(getShareText(true));
+  const isIOS   = /iPhone|iPad|iPod/i.test(navigator.userAgent);
+  const isAndroid = /Android/i.test(navigator.userAgent);
 
-  if (isMobile) {
-    // Deep link — opens WhatsApp app directly, skips the browser web page
-    const deepLink = 'whatsapp://send?text=' + text;
+  if (isAndroid) {
+    // Android Intent URL — most reliable way to open WhatsApp app directly
+    // The OS reads the package name and launches WhatsApp, no browser page at all
+    window.location.href =
+      'intent://send?text=' + text +
+      '#Intent;package=com.whatsapp;scheme=whatsapp;end';
 
-    if (isIOS) {
-      // iOS: assign to location — if WA is installed it opens, otherwise nothing
-      window.location.href = deepLink;
-    } else {
-      // Android: create hidden anchor and click it
-      const a = document.createElement('a');
-      a.href = deepLink;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-    }
-
-    // Fallback: if the app didn't open within 1.8s, use wa.me which also
-    // redirects to the app (or app store) instead of opening WhatsApp Web
-    setTimeout(function() {
-      if (!document.hidden) {
-        window.open('https://wa.me/?text=' + text, '_blank', 'noopener,noreferrer');
-      }
-    }, 1800);
+  } else if (isIOS) {
+    // iOS — native URL scheme opens WhatsApp app directly
+    window.location.href = 'whatsapp://send?text=' + text;
 
   } else {
-    // Desktop: wa.me shows QR code / WhatsApp Web — best desktop option
+    // Desktop — wa.me opens WhatsApp Web or QR page
     window.open('https://wa.me/?text=' + text, '_blank', 'noopener,noreferrer');
   }
 
